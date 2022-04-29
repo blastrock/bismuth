@@ -89,38 +89,17 @@ export class DynamicLayoutPart {
     return false;
   }
 
-  private static getNextWindow(subParts: Array<DynamicLayoutPart | string>, i: number): string {
-    const subPart = subParts[i];
-    if (subPart instanceof DynamicLayoutPart)
-      return this.getNextWindow(subPart.subParts, 0);
-    else
-      return subPart;
-  }
-
-  public prepare(tiles: EngineWindow[], nextWindow?: string): void {
+  public prepare(tiles: EngineWindow[], topLevel: boolean = true): void {
     console.log('part prepare');
     for (let i = 0; i < this.subParts.length; ++i) {
       console.log('part iteration');
       const subPart = this.subParts[i];
       if (subPart instanceof DynamicLayoutPart) {
-        subPart.prepare(tiles);
+        subPart.prepare(tiles, false);
       } else {
         if (tiles.length > 0 && subPart === tiles[0].id) {
           console.log('part matched window id', subPart);
-          const windowActive = tiles[0].window.active;
           tiles.shift();
-          // Add new windows that have appeared after the current window
-          if (windowActive) {
-            const localNextWindow = this.subParts.length > i + 1 ? this.subParts[i + 1] : nextWindow;
-            if (!localNextWindow)
-              break;
-            while (tiles.length > 0 && localNextWindow !== tiles[0].id) {
-              console.log('adding new part for windows after current');
-              this.subParts.splice(i, 0, tiles[0].id);
-              ++i;
-              tiles.shift();
-            }
-          }
         } else {
           console.log('part did not match, removing', subPart);
           this.subParts.splice(i, 1);
@@ -129,12 +108,35 @@ export class DynamicLayoutPart {
       }
     }
     // Remaining windows
-    while (tiles.length > 0) {
-      console.log('adding remaining window', tile.id);
-      this.subParts.push(tile.id);
-      tiles.shift();
+    if (topLevel) {
+      while (tiles.length > 0) {
+        console.log('adding remaining window', tiles[0].id);
+        this.subParts.push(tiles[0].id);
+        tiles.shift();
+      }
     }
     console.log('part prepared');
+  }
+
+  public newWindow(currentWindow: EngineWindow, newWindow: EngineWindow): boolean {
+    console.log(`adding new window ${newWindow.id}`);
+    for (let i = 0; i < this.subParts.length; ++i) {
+      const subPart = this.subParts[i];
+      if (subPart instanceof DynamicLayoutPart) {
+        console.log('recursing');
+        if (subPart.newWindow(currentWindow, newWindow))
+          return true;
+      }
+      else {
+        if (subPart === currentWindow.id) {
+          console.log('found the current window, adding the new one after');
+          this.subParts.splice(i + 1, 0, newWindow.id);
+          return true;
+        }
+      }
+    }
+    console.log('where is the current window??');
+    return false;
   }
 
   public apply(area: Rect, tiles: EngineWindow[]): Rect[] {
@@ -204,6 +206,10 @@ export default class DynamicLayout implements WindowsLayout {
     console.log('constructed');
   }
 
+  public newWindow(currentWindow: EngineWindow, newWindow: EngineWindow): void {
+    this.parts.newWindow(currentWindow, newWindow);
+  }
+
   // public adjust(
   //   area: Rect,
   //   tiles: EngineWindow[],
@@ -219,8 +225,10 @@ export default class DynamicLayout implements WindowsLayout {
     area: Rect
   ): void {
     try {
-      console.log('layout apply');
+      console.log('layout apply', tileables.map(x => x.id));
       tileables.forEach((tileable) => (tileable.state = WindowState.Tiled));
+      console.log('parts');
+      this.parts.dump();
 
       console.log('layout prepare');
       this.parts.prepare(tileables.slice());
@@ -249,6 +257,9 @@ export default class DynamicLayout implements WindowsLayout {
     this.parts.dump();
     if (action instanceof SplitPartHorizontally) {
       console.log('split horizontal triggered');
+      const currentWindow = engine.currentWindow();
+      if (currentWindow)
+        this.parts.split('horizontal', currentWindow);
     } else if (action instanceof SplitPartVertically) {
       console.log('splitting vertically');
       const currentWindow = engine.currentWindow();
