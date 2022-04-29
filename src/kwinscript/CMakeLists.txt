@@ -15,7 +15,7 @@ file(GLOB_RECURSE TYPESCRIPT_SOURCES CONFIGURE_DEPENDS "*.ts")
 if(USE_TSC)
   set(TSC_COMMAND "tsc" "--noEmit" "--incremental")
   if(USE_NPM)
-    list(PREPEND TSC_COMMAND "npx")
+    list(PREPEND TSC_COMMAND "yarnpkg")
   else()
     message(
       FATAL_ERROR
@@ -41,7 +41,7 @@ set(ESBUILD_COMMAND
     "--outfile=${CMAKE_CURRENT_BINARY_DIR}/bismuth/contents/code/index.mjs"
     "--format=esm" "--platform=neutral")
 if(USE_NPM)
-  list(PREPEND ESBUILD_COMMAND "npx")
+  list(PREPEND ESBUILD_COMMAND "yarnpkg")
 endif()
 
 add_custom_command(
