@@ -8,6 +8,8 @@ import { WindowState, EngineWindow } from "../window";
 
 import {
   Action,
+  SplitPartHorizontally,
+  SplitPartVertically,
 } from "../../controller/action";
 
 import { Rect, RectDelta } from "../../util/rect";
@@ -16,17 +18,19 @@ import { Controller } from "../../controller";
 import { Engine } from "..";
 import LayoutUtils from "./layout_utils";
 
+type SplitDirection = 'horizontal' | 'vertical';
+
 export class DynamicLayoutPart {
   public gap: number;
-  public horizontal: boolean;
+  public direction: SplitDirection;
   public subParts: Array<DynamicLayoutPart | string>;
 
   private config: Config;
 
-  constructor(config: Config) {
+  constructor(config: Config, direction: SplitDirection = 'horizontal') {
     this.config = config;
     this.gap = 0;
-    this.horizontal = true;
+    this.direction = direction;
     this.subParts = [];
   }
 
@@ -57,8 +61,43 @@ export class DynamicLayoutPart {
   //     idx === 0 ? delta.north : 0
   //   );
   // }
+  public split(direction: SplitDirection, currentWindow: EngineWindow): boolean {
+    let position = null;
+    for (let i = 0; i < this.subParts.length; ++i) {
+      const subPart = this.subParts[i];
+      if (subPart === currentWindow.id) {
+        console.log('found current window', i);
+        position = i;
+        break;
+      } else if (subPart instanceof DynamicLayoutPart) {
+        if (subPart.split(direction, currentWindow)) {
+          console.log('sub part did the split');
+          return true;
+        }
+      }
+    }
 
-  public prepare(tiles: EngineWindow[]): void {
+    if (position !== null) {
+      console.log('creating new part');
+      const newPart = new DynamicLayoutPart(this.config, direction)
+      newPart.subParts.push(currentWindow.id);
+      this.subParts[position] = newPart;
+      console.log('done');
+      return true;
+    }
+
+    return false;
+  }
+
+  private static getNextWindow(subParts: Array<DynamicLayoutPart | string>, i: number): string {
+    const subPart = subParts[i];
+    if (subPart instanceof DynamicLayoutPart)
+      return this.getNextWindow(subPart.subParts, 0);
+    else
+      return subPart;
+  }
+
+  public prepare(tiles: EngineWindow[], nextWindow?: string): void {
     console.log('part prepare');
     for (let i = 0; i < this.subParts.length; ++i) {
       console.log('part iteration');
@@ -71,10 +110,13 @@ export class DynamicLayoutPart {
           const windowActive = tiles[0].window.active;
           tiles.shift();
           // Add new windows that have appeared after the current window
-          if (windowActive && this.subParts.length > i + 1) {
-            while (tiles.length > 0 && this.subParts[i + 1] !== tiles[0].id) {
+          if (windowActive) {
+            const localNextWindow = this.subParts.length > i + 1 ? this.subParts[i + 1] : nextWindow;
+            if (!localNextWindow)
+              break;
+            while (tiles.length > 0 && localNextWindow !== tiles[0].id) {
               console.log('adding new part for windows after current');
-              this.subParts.push(tiles[0].id);
+              this.subParts.splice(i, 0, tiles[0].id);
               ++i;
               tiles.shift();
             }
@@ -87,16 +129,17 @@ export class DynamicLayoutPart {
       }
     }
     // Remaining windows
-    tiles.forEach((tile) => {
+    while (tiles.length > 0) {
       console.log('adding remaining window', tile.id);
       this.subParts.push(tile.id);
-    });
+      tiles.shift();
+    }
     console.log('part prepared');
   }
 
   public apply(area: Rect, tiles: EngineWindow[]): Rect[] {
     console.log('part apply');
-    const partAreas = LayoutUtils.splitAreaWeighted(area, this.subParts.map(_ => 1.0), this.gap, this.horizontal);
+    const partAreas = LayoutUtils.splitAreaWeighted(area, this.subParts.map(_ => 1.0), this.gap, this.direction === 'horizontal');
     const rects: Array<Rect> = [];
     this.subParts.forEach((subPart, i) => {
       if (subPart instanceof DynamicLayoutPart) {
@@ -114,6 +157,15 @@ export class DynamicLayoutPart {
     });
     console.log('part applied');
     return rects;
+  }
+
+  public dump(depth: number = 0): void {
+    this.subParts.forEach((subPart) => {
+      if (subPart instanceof DynamicLayoutPart)
+        subPart.dump(depth + 1);
+      else
+        console.log('  '.repeat(depth), subPart);
+    });
   }
 
   // public hasWindow(window: EngineWindow): boolean {
@@ -194,7 +246,18 @@ export default class DynamicLayout implements WindowsLayout {
   // }
 
   public executeAction(engine: Engine, action: Action): void {
-    action.executeWithoutLayoutOverride();
+    this.parts.dump();
+    if (action instanceof SplitPartHorizontally) {
+      console.log('split horizontal triggered');
+    } else if (action instanceof SplitPartVertically) {
+      console.log('splitting vertically');
+      const currentWindow = engine.currentWindow();
+      if (currentWindow)
+        this.parts.split('vertical', currentWindow);
+    } else {
+      action.executeWithoutLayoutOverride();
+    }
+    this.parts.dump();
   }
 
   public toString(): string {
