@@ -61,7 +61,15 @@ export class DynamicLayoutPart {
   //     idx === 0 ? delta.north : 0
   //   );
   // }
-  public split(direction: SplitDirection, currentWindow: EngineWindow): boolean {
+
+  public split(direction: SplitDirection, currentWindow: EngineWindow): number {
+    const replacePart = (position: number) => {
+      const newPart = new DynamicLayoutPart(this.config, direction)
+      newPart.subParts.push(currentWindow.id);
+      this.subParts[position] = newPart;
+      console.log('done');
+    };
+
     let position = null;
     for (let i = 0; i < this.subParts.length; ++i) {
       const subPart = this.subParts[i];
@@ -70,23 +78,28 @@ export class DynamicLayoutPart {
         position = i;
         break;
       } else if (subPart instanceof DynamicLayoutPart) {
-        if (subPart.split(direction, currentWindow)) {
+        const splitResult = subPart.split(direction, currentWindow);
+        if (splitResult === 1) {
           console.log('sub part did the split');
-          return true;
+          return 1;
+        } else if (splitResult === 2) {
+          console.log('replacing child part');
+          replacePart(i);
         }
       }
     }
 
     if (position !== null) {
+      // If this part contains a single window, replace it instead of nesting a new split
+      if (this.subParts.length === 1)
+        return 2;
+
       console.log('creating new part');
-      const newPart = new DynamicLayoutPart(this.config, direction)
-      newPart.subParts.push(currentWindow.id);
-      this.subParts[position] = newPart;
-      console.log('done');
-      return true;
+      replacePart(position);
+      return 1;
     }
 
-    return false;
+    return 0;
   }
 
   public prepare(tiles: EngineWindow[], topLevel: boolean = true): void {
