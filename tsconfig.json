@@ -4,7 +4,12 @@
     "target": "es2016",
     "noEmitOnError": false,
     "removeComments": true,
-    "lib": ["es5", "ES2015", "ES2016"],
+    "lib": [
+      "es5",
+      "ES2015",
+      "ES2016",
+      "dom"
+    ],
     "alwaysStrict": true,
     "strict": true,
     "moduleResolution": "node",
@@ -16,8 +21,15 @@
       }
     ]
   },
+  "types": [
+    "kwin-types"
+  ],
   "typedocOptions": {
-    "entryPoints": ["src/kwinscript"]
+    "entryPoints": [
+      "src/kwinscript"
+    ]
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*"
+  ]
 }
