@@ -63,6 +63,12 @@ export interface WindowStore {
    */
   move(srcWin: EngineWindow, destWin: EngineWindow, after?: boolean): void;
 
+  moveById(
+    srcWinId: string,
+    destWinId: string,
+    after?: boolean
+  ): void;
+
   /**
    * Swap windows positions
    */
@@ -79,7 +85,7 @@ export class WindowStoreImpl implements WindowStore {
   /**
    * @param list window list to initialize from
    */
-  constructor(public list: EngineWindow[] = []) {}
+  constructor(public list: EngineWindow[] = []) { }
 
   public move(
     srcWin: EngineWindow,
@@ -91,6 +97,25 @@ export class WindowStoreImpl implements WindowStore {
     if (srcIdx === -1 || destIdx === -1) {
       return;
     }
+
+    // Delete the source window
+    this.list.splice(srcIdx, 1);
+    // Place the source window in before destination window or after it
+    this.list.splice(after ? destIdx + 1 : destIdx, 0, srcWin);
+  }
+
+  public moveById(
+    srcWinId: string,
+    destWinId: string,
+    after?: boolean
+  ): void {
+    const srcIdx = this.list.findIndex(w => w.id === srcWinId);
+    const destIdx = this.list.findIndex(w => w.id === destWinId);
+    if (srcIdx === -1 || destIdx === -1) {
+      return;
+    }
+
+    const srcWin = this.list[srcIdx];
 
     // Delete the source window
     this.list.splice(srcIdx, 1);

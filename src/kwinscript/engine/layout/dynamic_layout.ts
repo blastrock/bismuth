@@ -8,6 +8,7 @@ import { WindowState, EngineWindow } from "../window";
 
 import {
   Action,
+  MoveActiveWindowLeft,
   SplitPartHorizontally,
   SplitPartVertically,
 } from "../../controller/action";
@@ -17,8 +18,10 @@ import { Config } from "../../config";
 import { Controller } from "../../controller";
 import { Engine } from "..";
 import LayoutUtils from "./layout_utils";
+import { WindowStore } from "../window_store";
 
 type SplitDirection = 'horizontal' | 'vertical';
+type MoveDirection = 'left' | 'right' | 'up' | 'down';
 
 export class DynamicLayoutPart {
   public gap: number;
@@ -102,6 +105,62 @@ export class DynamicLayoutPart {
     return 0;
   }
 
+  public moveWindow(windows: WindowStore, direction: MoveDirection, window: EngineWindow): number {
+    console.log('moving window nested');
+    for (let i = 0; i < this.subParts.length; ++i) {
+      const subPart = this.subParts[i];
+      if (subPart === window.id) {
+        console.log('found window to move', i);
+        if (this.direction === 'horizontal') {
+          if (direction === 'left') {
+            if (i > 0) {
+              const previousPart = this.subParts[i - 1];
+              if (typeof previousPart === 'string') {
+                const src = subPart;
+                const dst = previousPart;
+                windows.moveById(src, dst);
+                this.subParts.splice(i, 1);
+                this.subParts.splice(i - 1, 0, src);
+              }
+            }
+          }
+        }
+        return 1;
+      } else if (subPart instanceof DynamicLayoutPart) {
+        const moveResult = subPart.moveWindow(windows, direction, window);
+        if (moveResult === 1) {
+          console.log('sub part did the move');
+          return 1;
+        } else if (moveResult === 2) {
+          console.log('child cant move part');
+          return 1;
+        }
+      }
+    }
+    return 0;
+  }
+
+  public newWindow(currentWindow: EngineWindow, newWindow: EngineWindow): boolean {
+    console.log(`adding new window ${newWindow.id}`);
+    for (let i = 0; i < this.subParts.length; ++i) {
+      const subPart = this.subParts[i];
+      if (subPart instanceof DynamicLayoutPart) {
+        console.log('recursing');
+        if (subPart.newWindow(currentWindow, newWindow))
+          return true;
+      }
+      else {
+        if (subPart === currentWindow.id) {
+          console.log('found the current window, adding the new one after');
+          this.subParts.splice(i + 1, 0, newWindow.id);
+          return true;
+        }
+      }
+    }
+    console.log('where is the current window??');
+    return false;
+  }
+
   public prepare(tiles: EngineWindow[], topLevel: boolean = true): void {
     console.log('part prepare');
     for (let i = 0; i < this.subParts.length; ++i) {
@@ -129,27 +188,6 @@ export class DynamicLayoutPart {
       }
     }
     console.log('part prepared');
-  }
-
-  public newWindow(currentWindow: EngineWindow, newWindow: EngineWindow): boolean {
-    console.log(`adding new window ${newWindow.id}`);
-    for (let i = 0; i < this.subParts.length; ++i) {
-      const subPart = this.subParts[i];
-      if (subPart instanceof DynamicLayoutPart) {
-        console.log('recursing');
-        if (subPart.newWindow(currentWindow, newWindow))
-          return true;
-      }
-      else {
-        if (subPart === currentWindow.id) {
-          console.log('found the current window, adding the new one after');
-          this.subParts.splice(i + 1, 0, newWindow.id);
-          return true;
-        }
-      }
-    }
-    console.log('where is the current window??');
-    return false;
   }
 
   public apply(area: Rect, tiles: EngineWindow[]): Rect[] {
@@ -269,15 +307,17 @@ export default class DynamicLayout implements WindowsLayout {
   public executeAction(engine: Engine, action: Action): void {
     this.parts.dump();
     if (action instanceof SplitPartHorizontally) {
-      console.log('split horizontal triggered');
       const currentWindow = engine.currentWindow();
       if (currentWindow)
         this.parts.split('horizontal', currentWindow);
     } else if (action instanceof SplitPartVertically) {
-      console.log('splitting vertically');
       const currentWindow = engine.currentWindow();
       if (currentWindow)
         this.parts.split('vertical', currentWindow);
+    } else if (action instanceof MoveActiveWindowLeft) {
+      const currentWindow = engine.currentWindow();
+      if (currentWindow)
+        this.parts.moveWindow(engine.windows, 'left', currentWindow);
     } else {
       action.executeWithoutLayoutOverride();
     }
